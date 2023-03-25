@@ -1,0 +1,179 @@
+﻿@page "/rooms"
+@using Microsoft.AspNetCore.SignalR.Client
+@using BlazorCardsAgainstMatey.Data
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedLocalStorage BrowserStorage
+@inject NavigationManager NavigationManager
+@inject RoomService RService
+@inject UserService UService
+@implements IAsyncDisposable
+
+<PageTitle>Rooms</PageTitle>
+
+<h1>List of rooms</h1>
+
+@*<p>To add some description.</p>*@
+
+@if(rooms == null || user_id == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Owner</th>
+                <th>Max players</th>
+                <th>State</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var room in rooms)
+            {
+                <tr>
+                    <td>@room.Name</td>
+                    <td>@room.OwnerName</td>
+                    <td>@room.PlayersDisplay</td>
+                    <td>@room.State</td>
+                    <td>
+                        
+                        @if(room.Players.Exists(u => u.Id == user_id)
+                        || room.State == RoomState.Ingame)
+                        {
+                            string link = $@"/room/{room.Id}";
+                            <button class="btn btn-dark" @onclick="()=>NavigationManager.NavigateTo(link)">Open</button>
+                            if(room.OwnerId == user_id)
+                            {
+                                <button class="btn btn-dark">Delete (todo)</button>
+                            }
+                        }
+                        else
+                        {
+                            <button class="btn btn-dark" title="Join" @onclick="()=>JoinRoom(room)" href="/room/@room.Id">
+                                <span class="oi oi-chevron-right"></span>
+                            </button>
+                        }
+
+                    </td>
+                </tr>
+            }
+            @if(!rooms.Exists(room => room.OwnerId == user_id))
+            {
+                <tr>
+                    <td class="align-middle">
+                        <input class="form-control" @bind="newRoomName" size=10 placeholder="Enter a name for your new room..." @onkeyup="AddRoomIfEnter"/>
+                        <p class="text-danger m-0 w-50">@roomError</p>
+                    </td>
+                    <td class="align-middle">@username</td>
+                    <td class="align-middle">
+                        <p style="display:inline;">@newRoomPlayers</p> &nbsp;
+                        <input @bind="newRoomPlayers" style="display:inline;" type="range" min=3 max=10/>&nbsp;
+
+                    </td>
+                    <td class="align-middle">@RoomState.New</td>
+                    <td class="align-middle">
+                        <button class="btn btn-dark" title="Create room..." @onclick="AddRoom"><span class="oi oi-check"></span></button>
+                    </td>
+                </tr>    
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private HubConnection? hubConnection;
+    private List<string> messages = new List<string>();
+    private string? userInput;
+    private string? messageInput;
+    private string? newRoomName;
+    private Guid? user_id;
+    private string username = "";
+    private int newRoomPlayers = 5;
+    private string roomError = "";
+    private List<Room> rooms = new List<Room>();
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        //get user_id
+        var result = await BrowserStorage.GetAsync<string>("userid");
+        user_id = result.Success ? Guid.Parse(result.Value) : null;
+
+        var usernameResult = await BrowserStorage.GetAsync<string>("username");
+        username = usernameResult.Success ? usernameResult.Value : "...";
+        StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        //create connection in hub
+        //hubConnection = new HubConnectionBuilder()
+        //    .WithUrl(NavigationManager.ToAbsoluteUri("/room1"))
+        //    .Build();
+        //hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+        //{
+        //    var encodedMsg = $"{user}: {message}";
+        //    messages.Add(encodedMsg);
+        //    InvokeAsync(StateHasChanged);
+        //});
+        //await hubConnection.StartAsync();
+
+        //get list of rooms
+        rooms = await RService.GetAllRoomsAsync();
+    }
+
+    private async Task Send()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendMessage", userInput, messageInput);
+        }
+    }
+
+    private async Task AddRoom()
+    {
+        if (!String.IsNullOrEmpty(newRoomName) && user_id.HasValue)
+        {
+            string ownerName = await UService.GetUserName(user_id.Value);
+            var roomResponse = await RService.AddRoomAsync(newRoomName, user_id.Value, ownerName, newRoomPlayers);
+            if (roomResponse.StartsWith("Error")) roomError = roomResponse.Substring(6);
+            else if (roomResponse.StartsWith("roomId"))
+            {
+                var roomId = Convert.ToInt32( roomResponse.Substring(7) );
+                rooms = await RService.GetAllRoomsAsync();
+                await JoinRoom(rooms[roomId]);
+                newRoomName = "";   
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task AddRoomIfEnter(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") AddRoom();
+    }
+
+    private async Task JoinRoom(Room room)
+    {
+        if (!user_id.HasValue) return;
+
+        User user = await UService.JoinRoom(user_id.Value, room.Id, room.Name); //todo: handle response
+        //await RService.PlayerJoinAsync(room.Id, user);
+
+        NavigationManager.NavigateTo($@"room/{room.Id}");
+        StateHasChanged();   
+    }
+
+    public bool IsConnected =>
+        hubConnection?.State == HubConnectionState.Connected;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

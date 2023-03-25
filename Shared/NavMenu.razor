@@ -1,0 +1,115 @@
+﻿@inject ProtectedLocalStorage BrowserStorage
+@inject RoomService RService
+@inject UserService UService
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">Cards Against Matey</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="settings" Match="NavLinkMatch.All">
+                <span class="oi oi-person" aria-hidden="true"></span> @username
+            </NavLink>
+        </div>
+        
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/rooms" Match="NavLinkMatch.All">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Rooms
+            </NavLink>
+        </div>
+
+        @if(user != null)
+        {
+            if(user.JoinedRooms.Count > 0)
+            {
+                <div class="nav flex-column m-xl-1">   
+                    @foreach(var room in user.JoinedRooms)
+                    {
+                        var link = $@"/room/{room.Id}";
+
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link" href="@link" Match="NavLinkMatch.All">
+                                <span class="oi oi-media-record" aria-hidden="true"></span> @room.Name
+                            </NavLink>
+                        </div>   
+                    }
+                </div>         
+            }
+        }      
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+    private string? username = "";
+    private Guid? userId { get; set; }
+    private User? user {get; set; }
+    private bool logged;
+    private List<JoinedRoom> joinedRooms = new List<JoinedRoom>();
+    private bool temp2 = false;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender)
+        {
+            //logged
+            var result = await BrowserStorage.GetAsync<string>("logged");
+            logged = result.Success ? bool.Parse(result.Value) : false;
+
+            if (logged)
+            {
+                //username
+                var usernameResult = await BrowserStorage.GetAsync<string>("username");
+                username = usernameResult.Success ? usernameResult.Value : "...";
+
+                //joined rooms
+                var useridResult = await BrowserStorage.GetAsync<string>("userid");
+                userId = useridResult.Success ? Guid.Parse(useridResult.Value) : null;
+
+                if(userId.HasValue)
+                {
+                    temp2 = await UService.CheckUserExistence(userId.Value);    
+
+                    if (temp2)
+                    {
+                        user = await UService.GetUserAsync(userId.Value);
+                        StateHasChanged();
+                        //joinedRooms = await UService.GetUserJoinedRoom(userId);
+                    }
+                }
+            }
+            
+        }
+
+        if(user is not null && user.JoinedRoomsChanged)
+        {
+            StateHasChanged();
+            user.JoinedRoomsChanged = false;
+        }
+   
+    }
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    public void DoUpdate()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+}

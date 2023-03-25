@@ -1,0 +1,726 @@
+﻿@page "/room/{RoomId:int}"
+@inject RoomService RService
+@inject NavigationManager NaviHelper
+@inject ProtectedLocalStorage BrowserStorage
+@inject IJSRuntime JS
+
+@if(Room == null)
+{
+    <h3>Loading...</h3>
+}
+else
+{
+    <!-- game -->
+    <div class="h-75">
+        <h2>@Room.Name</h2>
+        <!-- before game start -->
+        @if (Room.Game == null)
+        {
+            if(Room.OwnerId == userId)
+            {
+                <div class="container justify-content-between mw-100">
+                    <div class="row">
+
+                        @*SENTENCES*@
+                        <div class="col-4">
+                            Senteces (@(Room.Sentences.Count)):
+
+                            <div class="form-group">
+                                <div class="input-group text-center btn-up mt-2">
+                                    <input @bind="newSentenceValue" class="form-control btn-up" style="flex-grow: 6;" size=50 type="text" 
+                                            placeholder="Enter a value for the new sentence..." @onkeyup="AddSentenceIfEnter"/>
+                                    <button class="form-control btn btn-dark btn-up" title="Add" @onclick="AddSentence"><span class="oi oi-plus"></span></button>
+                                </div>
+                            </div>
+
+                            <ul class="list-group">
+                                @foreach(var sen in Room.Sentences)
+                                {
+                                    <li class="list-group-item">
+                                        <div class="input-group my-auto">
+                                            <span style="width:84%;">@sen.Value</span>
+                                            <span style="width:8%;">(@sen.BlankFields)</span>
+                                            <button class="btn-close" @onclick="()=>RemoveSentence(sen.Id)"></button>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+
+                            <div class="input-group justify-content-center text-center">
+                                <label class="btn btn-dark btn-down col-md-4" title="Load from file...">
+                                    <span class="oi oi-data-transfer-upload"></span>
+                                    <InputFile style="display:none;" OnChange="e => LoadSentences(e)"></InputFile>
+                                </label>
+                                <button class="btn btn-dark col mx-1" title="Clear" @onclick="ClearSentences"><span class="oi oi-trash"></span> </button>
+                                <button class="btn btn-dark btn-down col-md-4" title="Save to file..." @onclick="SaveSentences"><span class="oi oi-data-transfer-download"></span></button>
+                            </div>
+                        </div>
+
+                        @*GAME CONFIG*@
+                        <div class="col container border m-4">
+                            <br>
+                            <div class="row">
+                                <div class="game-header" id="game-header"> 
+                                    @*Players*@
+                                    <div class="form-group row">
+                                        <label for="staticEmail" class="col-sm-8 col-form-label">Players</label>
+                                        <div class="col-sm-4">
+                                            @if(Room.Players.Count > 2)
+                                            {
+                                                <input type="text" readonly class="form-control-plaintext col-sm-8 text-center" value="@Room.PlayersDisplay">
+                                            }
+                                            else
+                                            {
+                                                <input type="text" readonly class="form-control-plaintext col-sm-8 fw-bold text-center text-danger" value="@Room.PlayersDisplay">
+                                            }
+                                        </div>
+                                    </div>
+                                    @*Cards in hand*@
+                                    <div class="form-group row">
+                                        <label for="staticEmail" class="col-sm-8 col-form-label">Cards in hand</label>
+                                        <div class="col-sm-4">
+                                            <input type="number" min=1 class="form-control text-center" @bind="cardsInHand">
+                                        </div>
+                                    </div>
+                                    @*Score to win*@
+                                    <div class="form-group row">
+                                        <label for="staticEmail" class="col-sm-8 col-form-label">Score to win</label>
+                                        <div class="col-sm-4">
+                                            <input type="number" min="1" class="form-control text-center" @bind="scoreToWin">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row m-3 justify-content-center text-center">
+                                @if(Room.Players.Count > 2
+                                    && Room.Players.Count * cardsInHand <= Room.Cards.Count)
+                                {
+                                    <button class="btn btn-dark btn-game" @onclick="NewGame">Start game</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-outline-dark btn-game " disabled>Start game</button>
+
+
+                                    if(Room.Players.Count < 3)
+                                    {
+                                        <div class="text-danger text-wrap mt-2">You need at least 3 players to start a new game.</div>
+                                    }
+
+                                    if(Room.Players.Count * cardsInHand > Room.Cards.Count)
+                                    {
+                                        <div class="text-danger text-wrap mt-2">Too few cards to be dealt to all players</div>
+                                    }
+                                }
+
+                            </div>
+                        </div>
+
+                        @*CARDS*@
+                        <div class="col-4">
+                            @if(Room.Players.Count * cardsInHand > Room.Cards.Count)
+                            {
+                                <div class="text-danger">Cards (@(Room.Cards.Count)):</div>
+                            }
+                            else
+                            {
+                                <div>Cards (@(Room.Cards.Count)):</div>
+                            }
+
+                            <div class="form-group">
+                                <div class="input-group mt-2">
+                                    <input @bind="newCard" class="form-control btn-up" style="flex-grow: 6;" type="text" size=50 
+                                            placeholder="Enter a value for the new card..." @onkeyup="AddCardIfEnter"/>
+                                    <button class="form-control btn btn-dark btn-up" type="button" @onclick="AddCard"><span class="oi oi-plus"></span></button>
+                                </div>
+                            </div>
+                            <ul class="list-group">
+                                @foreach(var c in Room.Cards)
+                                {
+                                    <li class="list-group-item">
+                                        <div class="input-group my-auto">
+                                            <span style="width:92%;">@c.Value</span>
+                                            <button class="btn-close" @onclick="()=>RemoveCard(c.Id)"/>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+
+                            <div class="form-group">
+                                <div class="input-group justify-content-center">
+                                    <label class="btn btn-dark btn-down col-md-4" title="Load from file...">
+                                        <span class="oi oi-data-transfer-upload"></span>
+                                        <InputFile style="display:none;" OnChange="e => LoadCards(e)"></InputFile>
+                                    </label>
+                                    <button class="btn btn-dark col mx-1" title="Clear" @onclick="ClearCards"><span class="oi oi-trash"></span></button>
+                                    <button class="btn btn-dark  btn-down col-md-4" title="Save to file..." @onclick="SaveCards"><span class="oi oi-data-transfer-download"></span></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if(Room.Players.Exists(p => p.Id == userId))
+            {
+                <h5>Wait for admin to start a new game.</h5>
+            }
+            else
+            {
+                <div>todo: Join button</div>
+                <div>todo: Join as observer button</div>
+            }
+        }
+        else
+        {
+        <!-- ingame -->
+            <div style="height: 15%;max-height: 15%;">
+                <h3 class="sentence">@Room.Game.CurrentSentence.Value</h3>
+
+                @if(Room.Game.State == GameState.ShowWinnerCards
+                || Room.Game.State == GameState.Finished)
+                {
+                    Guid winnerPlayerId = Room.Game.ChosenCards.Find(cardSet => cardSet.Winner == true).PlayerId;
+                    string winnerPlayerName = Room.Players.Find(p => p.Id == winnerPlayerId).Name;    
+                    
+                    if(Room.Game.State == GameState.ShowWinnerCards)
+                    {
+                        <div class="sentence">
+                            <h4 class="text-success">@winnerPlayerName scores a point!</h4><br/>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="sentence">
+                            <h2 class="text-success">@winnerPlayerName wins! Congratulations!</h2><br/>
+                        </div>
+                    }
+                }     
+            </div> 
+
+            @*BOARD*@
+            <div class="card-container board border">
+                @foreach(var cardSet in Room.Game.ChosenCards )
+                {
+                    if(Room.Game.State == GameState.ShowCards
+                    && Room.Game.ChooserId == userId)
+                    {
+                        if(Selected.Exists(c => c.Id == cardSet.Cards[0].Id))
+                        {
+                            <div class="border card-set card-set-pickable card-selected" @onclick="(() => UnselectCardChooser(cardSet))">
+                            @foreach(var card in cardSet.Cards)
+                            {
+                                <p class="card card-selected">@card.Value</p>  
+                            }
+                            </div>
+                        }
+                        else if (Selected.Count == 0)
+                        {
+                            <div class="border card-set card-set-pickable" @onclick="(() => SelectCardChooser(cardSet))">
+                            @foreach(var card in cardSet.Cards)
+                            {
+                                <p class="card">@card.Value</p>  
+                            }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="border card-set">
+                            @foreach(var card in cardSet.Cards)
+                            {
+                                <p class="card">@card.Value</p>  
+                            }
+                            </div>
+                        }
+                    }
+                    else if(Room.Game.State == GameState.ShowWinnerCards
+                    || Room.Game.State == GameState.Finished)
+                    {
+                        if(Room.Game.ChosenCards.FirstOrDefault(cs => cs.Winner == true).Cards.Exists(c => c.Id == cardSet.Cards[0].Id))
+                        {
+                            <div class="border card-set card-winner">
+                            @foreach(var card in cardSet.Cards)
+                            {
+                                <p class="card card-winner">@card.Value</p>  
+                            }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="border card-set">
+                            @foreach(var card in cardSet.Cards)
+                            {
+                                <p class="card">@card.Value</p>  
+                            }
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="border card-set">
+                            @foreach(var card in cardSet.Cards)
+                            {
+                                if(Room.Game.State == GameState.PickCards)
+                                {
+                                    <p class="card"></p>  
+                                }
+                                else if(Room.Game.State == GameState.ShowCards)
+                                {
+                                    <p class="card">@card.Value</p>
+                                }
+                                else if (Room.Game.State == GameState.ShowWinnerCards )
+                                {
+                                    if(cardSet.Winner == true)
+                                    {
+                                        <p class="card-winner card">@card.Value</p>
+                                    }
+                                    else
+                                    {
+                                        <p class="card">@card.Value</p>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="card"></p>  
+                                }
+                            }
+                        </div>
+                    } 
+                }
+            </div> 
+            @*END BOARD*@
+            <br />
+
+            @*GAME BUTTONS*@
+            <div class="game-buttons row" id="gejm_buttons">
+                @if(Room.Game.State == GameState.PickCards)
+                {
+                    if(userId == Room.Game.ChooserId)
+                    {
+                        @:You are the Card Char! @Environment.NewLine Wait for others to pick their answers.
+                    }
+                    else
+                    {
+                        
+                        if(Selected.Count == Room.Game.CurrentSentence.BlankFields)
+                        {
+                            <button class="btn btn-primary col-md-1 h-50 my-auto" @onclick="SendSelectedAsync">Confirm</button>
+                        }
+                        else if(Room.Game.ChosenCards.Exists(cardSet => cardSet.PlayerId == userId))
+                        {
+                            <div class="my-auto">Wait for others to pick their answers.</div>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary col-md-1 offset-md-5 h-50 my-auto" disabled>Confirm</button>
+                            @if(Room.Game.CurrentSentence.BlankFields == 1)
+                            {
+                                <div class="col-md-5 text-start my-auto">Pick the best matching card.</div>    
+                            }
+                            else if(Room.Game.CurrentSentence.BlankFields > 1)
+                            {
+                                <div class="col-md-5 text-start my-auto">Pick @(Room.Game.CurrentSentence.BlankFields) cards in correct order.</div>
+                            }
+                        }
+                    }
+
+                }
+                else if(Room.Game.State == GameState.ShowCards)
+                {
+                    if(userId == Room.Game.ChooserId)
+                    {
+                        if(Selected.Count == Room.Game.CurrentSentence.BlankFields)
+                        {
+                            <button class="btn btn-primary col-md-1 h-50 my-auto" @onclick="SendSelectedChooserAsync">Confirm</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary col-md-1 offset-md-5 h-50 my-auto" disabled>Confirm</button>
+                            <div class="col-md-5 text-start my-auto">Pick the best matching answer.</div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="my-auto">Wait for the decision...</div>
+                    }
+
+                }
+                else if(Room.Game.State == GameState.ShowWinnerCards)
+                {
+                    Guid winnerPlayerId = Room.Game.ChosenCards.FirstOrDefault(cardSet => cardSet.Winner == true).PlayerId;
+                    string winnerPlayerName = Room.Players.FirstOrDefault(p => p.Id == winnerPlayerId).Name;
+
+                    if(userId == Room.Game.ChooserId)
+                    {
+                        <button class="btn btn-primary col-md-1 offset-md-5 h-50 my-auto" @onclick="NextRoundAsync">Next round</button>
+                        <div class="col-md-5 text-start my-auto">@winnerPlayerName scores a point! Click the button to continue.</div>
+                    }
+                    else
+                    {
+                        <div class="my-auto">@winnerPlayerName scores a point. Wait for next the round.</div>
+                    }
+                }
+                else if(Room.Game.State == GameState.Finished)
+                {
+                    if(userId == Room.OwnerId)
+                    {
+                        <button class="btn btn-primary col-md-1 h-50 my-auto" @onclick="NextGame">New game</button>
+                    }
+                }
+            </div>
+            @*END GAME BUTTONS*@
+
+            @*HAND*@
+            <div class="card-container hand">
+                @foreach(var card in Room.Game.Players.Find(p => p.Id == userId).Hand )
+                {
+                    if (Room.Game.State == GameState.PickCards
+                    && Room.Game.ChooserId != userId
+                    && !Room.Game.ChosenCards.Exists(cs => cs.PlayerId == userId))
+                    {
+                        if(Selected.Exists(c => c.Id == card.Id))
+                        {
+                            <p @onclick="()=>UnselectCard(card)" class="card card-pickable card-selected">@card.Value</p>
+                        }
+                        else if(Selected.Count < Room.Game.CurrentSentence.BlankFields)
+                        {
+                            <p @onclick="()=>SelectCard(card)" class="card card-pickable">@card.Value</p>
+                        }
+                        else
+                        {
+                            <p class="card">@card.Value</p>
+                        }
+                    }
+                    else
+                    {                    
+                        <p class="card">@card.Value</p>
+                    }
+                }
+            </div>
+            @*END HAND*@
+        }
+    </div>
+    
+    <!-- room footer -->
+    <div class="chat-container container fixed-bottom">
+        <div class="row h-100">
+            @*scoreboard*@
+            <div class="chat-scoreboard col-md-3 border-right">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th class="text-center">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach(var pl in Room.Players)
+                        {
+                            string name = pl.Name;
+                        
+
+                            <tr>
+                                @*Username*@
+                                <td>
+                                @if(pl.Id == userId)
+                                {
+                                    <b>@name</b>
+                                }
+                                else
+                                {
+                                    @name
+                                }
+                            
+                                @if(Room.OwnerId==pl.Id)
+                                {
+                                    @:&nbsp;
+                                    <span class="oi oi-star"></span>
+                                }
+
+                                </td>
+
+                                @*Score*@
+                                @if (Room.Game != null && Room.Game.Players.Exists(p => p.Id == pl.Id))
+                                {
+                                    <td class="text-center">@Room.Game.Players.Find(p => p.Id == pl.Id).Score</td>
+                                }
+                                else
+                                {
+                                    <td class="text-center">-</td>
+                                }
+
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            
+            @*game info*@
+            <div class="col-md-3 mx-4 bg-white border">
+                <p>
+                    todo: gameinfo
+                </p>
+            </div>
+
+            @*chat*@
+            <div class="col-md-4 mx-4 bg-white border">
+                <p>
+                    todo: chat
+                </p>
+                <div class="input-group">
+                    <input class="form-control" type="text" placeholder="Enter a message..."/>
+                    <button class="btn btn-dark"><span class="oi oi-chevron-right"></span></button>
+                </div>
+            </div>
+        </div>
+    </div>    
+}
+
+@code {
+    [Parameter]
+    public int RoomId { get; set; }
+    public Room? Room { get; set; }
+    public List<Card> Selected { get; set; } = new List<Card>();
+    private Guid? userId;
+    private string gameTip = "Wait for admin to start a game.";
+    private string newCard = "";
+    private string newSentenceValue = "";
+    private int newSentenceBlanks = 1;
+    private int cardsInHand = 3;
+    private int scoreToWin = 10;
+
+    protected async override Task OnInitializedAsync()
+    {
+        Console.WriteLine($"RoomId: {RoomId}");
+        if (!await RService.CheckRoomExistence(RoomId)) NaviHelper.NavigateTo("/");
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        //Room = await RService.GetRoomAsync(RoomId);
+        var result = await BrowserStorage.GetAsync<Guid>("userid");
+        userId = result.Success ? result.Value : null;
+
+        Room = await RService.GetRoomAsync(RoomId);
+        StateHasChanged(); //todo: przenieść
+    }
+
+    private async Task AddCard()
+    {
+        //Console.WriteLine($"{Room.Name}({userId}): AddCard");
+
+        if(!string.IsNullOrEmpty(newCard))
+        {
+            var result = await RService.AddCardAsync(Room.Id, newCard);
+            if(result) StateHasChanged();
+            newCard = "";
+        }
+    }
+
+    private async Task AddCardIfEnter(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await AddCard();
+    }
+
+    private async Task RemoveCard(int cardId)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): RemoveCard");
+
+        var result = await RService.RemoveCardAsync(RoomId, cardId);
+        if(result) StateHasChanged();
+    }
+
+    private async Task LoadCards(InputFileChangeEventArgs e)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): LoadCards");
+
+        var result = await RService.LoadCardsAsync(Room.Id, e.File.OpenReadStream());
+        if(result) StateHasChanged();
+    }
+
+    private async Task SaveCards()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): SaveCards");
+
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        Room.Cards.ForEach(card => sb.AppendLine(card.Value));
+
+        await JS.InvokeVoidAsync("save_file", $"{Room.Name}_Cards.txt", "text/plain", sb.ToString());
+    }
+
+    private async Task ClearCards()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): ClearCards");
+        var result = await RService.ClearCardsAsync(Room.Id);
+        if(result) StateHasChanged();
+    }
+
+    private async Task AddSentence()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): AddSentence"); 
+
+        if(!string.IsNullOrEmpty(newSentenceValue))
+        {
+            newSentenceBlanks = 0;
+            char previous_c = ' ';
+            foreach(char c in newSentenceValue)
+            {
+                if(c == '_' && previous_c != '_')
+                {
+                    newSentenceBlanks++;
+                }
+                previous_c = c;
+            }
+
+            if(newSentenceBlanks > 0)
+            {
+                var result = await RService.AddSentenceAsync(Room.Id, newSentenceValue, newSentenceBlanks);
+                if (result) StateHasChanged();
+            }
+            newSentenceValue = "";
+        }
+    }
+
+    private async Task AddSentenceIfEnter(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await AddSentence();
+    }
+
+    private async Task RemoveSentence(int sentenceId)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): RemoveSentence");
+
+        var result = await RService.RemoveSentenceAsync(Room.Id, sentenceId);
+        if (result) StateHasChanged();
+    }
+
+    private async Task LoadSentences(InputFileChangeEventArgs e)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): LoadSentences");
+
+        var result = await RService.LoadSentencesAsync(Room.Id, e.File.OpenReadStream());
+        if(result) StateHasChanged();
+    }
+
+    private async Task SaveSentences()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): SaveSentences");
+        
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        Room.Sentences.ForEach(sentence => sb.AppendLine($"{sentence.Value};{sentence.BlankFields}"));
+
+        await JS.InvokeVoidAsync("save_file", $"{Room.Name}_Sentences.txt", "text/plain", sb.ToString());
+    }
+
+    private async Task ClearSentences()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): ClearSentences");
+        var result = await RService.ClearSentencesAsync(Room.Id);
+        if(result) StateHasChanged();
+        //todo
+    }
+
+    private async Task NewGame()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): NewGame");
+        Room = await RService.NewGameAsync(RoomId, cardsInHand, scoreToWin);
+        StateHasChanged();
+    }
+
+    private async Task SelectCard(Card card)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): SelectCard");
+        if(Selected.Count < Room.Game.CurrentSentence.BlankFields 
+            && !Selected.Exists(c => c.Id == card.Id))
+        {
+            Selected.Add(card);
+        }
+    }
+
+    private async Task SelectCardChooser(ChosenCards cardSet)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): SelectCardChooser");
+
+        if(!Selected.Exists(c => c.Id == cardSet.Cards[0].Id))
+        {
+            foreach(var card in cardSet.Cards)
+            {
+                Selected.Add(card);   
+            }
+        }
+    }
+
+    private async Task UnselectCardChooser(ChosenCards cardSet)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): UnselectCardChooser");
+
+        if(Selected.Exists(c => c.Id == cardSet.Cards[0].Id))
+        {
+            foreach(var card in cardSet.Cards)
+            {
+                Selected.Remove(card);   
+            }
+        }
+    }
+
+    private async Task UnselectCard(Card card)
+    {
+        Console.WriteLine($"{Room.Name}({userId}): UnselectCard");
+        Selected.RemoveAt(Selected.FindIndex(c => c.Id == card.Id));
+    }
+
+    private async Task SendSelectedAsync()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): SendSelectedAsync");
+        if(userId.HasValue) 
+        { 
+            var result = await RService.SendAnswerAsync(Room.Id, userId.Value, Selected.ToList());
+            Room = result != null ? result : Room;
+
+            if (result != null)
+            {
+                Selected.Clear();
+            }
+        }
+    }
+
+    private async Task SendSelectedChooserAsync()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): SendSelectedChooserAsync");
+        if(userId.HasValue) 
+        { 
+            var result = await RService.SendAnswerChooserAsync(Room.Id, userId.Value, Selected.ToList());
+            Room = result != null ? result : Room;
+
+            if (result != null)
+            {
+                Selected.Clear();
+            }
+        }
+    }
+
+    private async Task NextRoundAsync()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): NextRoundAsync");
+        if(userId.HasValue) 
+        { 
+            var result = await RService.NewRoundAsync(Room.Id);
+            Room = result != null ? result : Room;
+
+            if (result != null) Selected.Clear();
+        }
+    }
+
+    private void NextGame()
+    {
+        Console.WriteLine($"{Room.Name}({userId}): NextRoundAsync");
+        Room.Game = null;
+        StateHasChanged();
+        return;
+    }
+
+    private void LogMessage(string message)
+    {
+        Console.WriteLine($"{DateTime.UtcNow}: {Room.Name} ({userId}) - {message}");
+        return;
+    }
+}

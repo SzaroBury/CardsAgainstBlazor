@@ -1,0 +1,148 @@
+﻿@inject ProtectedLocalStorage BrowserStorage
+@inject UserService UService
+@inject IJSRuntime JS
+@inherits LayoutComponentBase
+
+@if(logged == false)
+{
+    <div class="page">
+        <main>
+            <article class="content p-5 text-center">
+                <h1 class=fw-bold>Cards Against Humanity</h1>
+                <h3>Please enter your username:</h3>
+                <div class="container">
+                    <div class="col-md-3 mx-auto">
+                        <div class="input-group m-3">
+                            <input class="form-control" aria-describedby="button-enter-username" placeholder="Username" @bind="username" @onkeyup="LoginIfEnter"/>
+                            <button class="btn btn-dark" type="button" id="button-enter-username" @onclick="Login" >
+                                <span class="oi oi-chevron-right mx-4"></span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <p id="login_error" class="text-danger">@error_message</p>
+                </div>
+
+            </article>
+        </main>
+    </div>
+}
+else
+{
+    <PageTitle>BlazorCardsAgainstMatey</PageTitle>
+
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu @ref="navMenu"/>
+        </div>
+
+        <main>
+            <div class="top-row px-4">
+                @*<span>You are logged in as&nbsp;<b>@username</b>.</span> @*(id: '@userId ' ).*@
+                <button class="fw-bold btn btn-outline-dark text-dark" @onclick="Logout">
+                    Logout &nbsp;
+                    <span class="oi oi-power-standby"></span>
+                </button>
+            </div>
+
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>    
+}
+
+@code
+{
+    public bool logged = true;
+    public string username = "";
+    private Guid? userId;
+    private string error_message = "";
+    protected NavMenu navMenu;
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender)
+        {
+            var result = await BrowserStorage.GetAsync<string>("logged");
+            logged = result.Success ? bool.Parse(result.Value) : false;
+
+            if (logged == true)
+            {
+                if(!userId.HasValue)
+                {
+                    try
+                    {
+                        var result2 = await BrowserStorage.GetAsync<string>("userid");
+                        userId = result2.Success ? Guid.Parse(result2.Value) : null;
+                    }
+                    catch(System.Text.Json.JsonException e)
+                    {
+                        Console.WriteLine($"catch: JsonException {e.Source}");
+                        await Logout();
+                    }
+                }
+
+                if (userId.HasValue)
+                {
+                    //check if user exists
+                    if (await UService.CheckUserExistence(userId.Value))
+                    {
+                        username = await UService.GetUserName(userId.Value);
+                    }
+                    else await Logout();
+                }
+                //else logout
+                else await Logout();
+            }
+            StateHasChanged();   
+        }
+
+    }
+
+    public async Task Login()
+    {
+        //to check: check for empty username
+        error_message = "Loading ...";
+        if (String.IsNullOrEmpty(username))
+        {
+            error_message = "Username cannot be empty.";
+        }
+        //to check: check for name uniqueness
+        else if(!await UService.CheckNameUniqueness(username))
+        {
+            error_message = "Username already taken.";
+        }
+        // add user
+        else
+        {
+            userId = await UService.Login(username);
+
+            //save user in local storage
+            await BrowserStorage.SetAsync("userid", userId.ToString());
+            await BrowserStorage.SetAsync("username", username);
+            await BrowserStorage.SetAsync("logged", "true");
+            logged = true;
+        }
+
+        navMenu.DoUpdate();
+    }
+
+    public async Task LoginIfEnter(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await Login();
+    }
+
+    public async Task Logout()
+    {
+        await BrowserStorage.SetAsync("logged", "false");
+        await BrowserStorage.DeleteAsync("userid");
+        await BrowserStorage.DeleteAsync("username");
+        logged = false;
+        username = "";
+        userId = null;
+        error_message = "";
+        navMenu.DoUpdate();
+    }
+}
+
