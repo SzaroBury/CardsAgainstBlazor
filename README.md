@@ -1,4 +1,4 @@
-# CardsAgainstMatey
+# CardsAgainstBlazor
 
 ASP.NET Core Blazor app that allows users to play Cards Against Humanity.
 <p align="center">
