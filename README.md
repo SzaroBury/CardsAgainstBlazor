@@ -1,6 +1,6 @@
 # CardsAgainstMatey
 
-A simple ASP.NET Core Blazor app that allows users to play Cards Against Humanity.
+ASP.NET Core Blazor app that allows users to play Cards Against Humanity.
 <p align="center">
   <img src="https://github.com/SzaroBury/CardsAgainstMatey/assets/37550354/4c0b9682-b26a-4fc4-87e8-b3cb32cb1eef"/>
 </p>
